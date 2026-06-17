@@ -16,9 +16,16 @@ pub fn yield_distributed(env: &Env, token: Address, amount: i128) {
     env.events().publish(topics, amount);
 }
 
-pub fn deposit_cap_updated(env: &Env, token: Address, old_cap: i128, new_cap: i128) {
+pub fn deposit_cap_updated(
+    env: &Env,
+    token: Address,
+    old_cap: i128,
+    new_cap: i128,
+    current_deposits: i128,
+) {
     let topics = (Symbol::new(env, "DepositCapUpdated"), token);
-    env.events().publish(topics, (old_cap, new_cap));
+    env.events()
+        .publish(topics, (old_cap, new_cap, current_deposits));
 }
 
 pub fn pool_paused(env: &Env) {

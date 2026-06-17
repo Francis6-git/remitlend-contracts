@@ -334,6 +334,12 @@ impl LendingPool {
         env.deployer().update_current_contract_wasm(new_wasm_hash);
     }
 
+    /// Sets the maximum pool size cap.
+    ///
+    /// It is permitted to set a cap lower than the current `total_deposits`.
+    /// When this occurs, the pool becomes "over cap" and all new deposits are
+    /// blocked until withdrawals reduce `total_deposits` below the new cap.
+    /// This is useful for safely winding down a pool without forcing withdrawals.
     pub fn set_max_pool_size(env: Env, token: Address, max: i128) -> Result<(), PoolError> {
         Self::admin(&env).require_auth();
         if max < 0 {
@@ -341,13 +347,14 @@ impl LendingPool {
         }
 
         let old_max = Self::get_max_pool_size(env.clone(), token.clone());
+        let current_deposits = Self::total_deposits(&env, &token);
 
         env.storage()
             .instance()
             .set(&DataKey::MaxPoolSize(token.clone()), &max);
         Self::bump_instance_ttl(&env);
 
-        deposit_cap_updated(&env, token, old_max, max);
+        deposit_cap_updated(&env, token, old_max, max, current_deposits);
         Ok(())
     }
 
@@ -374,6 +381,15 @@ impl LendingPool {
             .instance()
             .get(&DataKey::MaxPoolSize(token))
             .unwrap_or(0)
+    }
+
+    pub fn is_over_cap(env: Env, token: Address) -> bool {
+        let max = Self::get_max_pool_size(env.clone(), token.clone());
+        if max == 0 {
+            false
+        } else {
+            Self::total_deposits(&env, &token) > max
+        }
     }
 
     pub fn get_total_deposits(env: Env, token: Address) -> i128 {
