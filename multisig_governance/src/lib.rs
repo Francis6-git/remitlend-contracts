@@ -303,7 +303,7 @@ impl GovernanceContract {
         // Map::set is idempotent — duplicate calls do not increment the count
         pending.approvals.set(signer.clone(), true);
 
-        let approvals_so_far = pending.approvals.len();
+        let approvals_so_far = Self::count_valid_approvals(&pending);
         let threshold = pending.threshold;
         let proposal_id = pending.id;
 
@@ -366,8 +366,8 @@ impl GovernanceContract {
             panic!("proposal has expired (4016)");
         }
 
-        // INV-2: threshold must be met
-        let approval_count = pending.approvals.len();
+        // INV-2: threshold must be met using only approvals from the current signer list.
+        let approval_count = Self::count_valid_approvals(&pending);
         if approval_count < pending.threshold {
             panic!("threshold not met — more approvals required (4011)");
         }
@@ -562,7 +562,7 @@ impl GovernanceContract {
             .instance()
             .get(&KEY_PENDING)
             .expect("no pending transfer (4004)");
-        pending.approvals.len()
+        Self::count_valid_approvals(&pending)
     }
 
     /// Returns seconds remaining until the timelock expires.
@@ -586,6 +586,19 @@ impl GovernanceContract {
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    fn count_valid_approvals(pending: &PendingTransfer) -> u32 {
+        // Approval counts are derived from the current signer list only.
+        // This prevents stale or invalid approvals in the map from satisfying
+        // the threshold if they are not associated with an active signer.
+        let mut count: u32 = 0;
+        for signer in pending.signers.iter() {
+            if let Some(true) = pending.approvals.get(signer) {
+                count = count.saturating_add(1);
+            }
+        }
+        count
+    }
 
     fn read_admin(env: &Env) -> Address {
         env.storage()

@@ -241,6 +241,39 @@ fn approve_is_idempotent() {
 }
 
 #[test]
+#[should_panic(expected = "threshold not met")]
+fn finalize_only_counts_current_signer_approvals() {
+    let (env, client, admin, _) = setup();
+    let s1 = Address::generate(&env);
+    let s2 = Address::generate(&env);
+    let signers = Vec::from_slice(&env, &[s1.clone(), s2.clone()]);
+
+    set_ts(&env, 1000);
+    client.propose_admin_transfer(
+        &Address::generate(&env),
+        &signers,
+        &2,
+        &MIN_TIMELOCK_SECONDS,
+    );
+
+    client.approve_transfer(&s1);
+
+    let invalid_signer = Address::generate(&env);
+    let mut pending: PendingTransfer = env
+        .storage()
+        .instance()
+        .get(&KEY_PENDING)
+        .expect("pending transfer");
+    pending.approvals.set(invalid_signer, true);
+    env.storage().instance().set(&KEY_PENDING, &pending);
+
+    assert_eq!(client.get_approval_count(), 1);
+
+    set_ts(&env, 1000 + MIN_TIMELOCK_SECONDS + 1);
+    client.finalize_admin_transfer(&admin);
+}
+
+#[test]
 #[should_panic(expected = "caller is not in the signer list")]
 fn approve_rejects_non_signer() {
     let (env, client, _, _) = setup();
