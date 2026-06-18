@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install toolchain components
+        run: |
+          rustup component add rustfmt clippy
+          rustup target add wasm32-unknown-unknown
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Build
+        run: cargo build
+
+      - name: Lint
+        run: cargo clippy -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      - name: Build WASM (wasm32)
+        run: cargo build --target wasm32-unknown-unknown
+
+      - name: Build fuzz crate
+        run: cargo build --manifest-path fuzz/Cargo.toml
