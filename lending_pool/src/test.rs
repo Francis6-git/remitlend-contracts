@@ -1332,3 +1332,43 @@ fn test_multiple_depositors_share_yield_proportionally_and_total_shares_track_co
     assert_eq!(token_client.balance(&pool_id), 0);
     assert_eq!(pool_client.get_total_shares(&token_id), 0);
 }
+
+#[test]
+fn test_cap_below_current_deposits_blocks_deposits_but_allows_withdrawals() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let (token_id, stellar_asset_client, _token_client) = create_token_contract(&env, &token_admin);
+
+    let pool_id = env.register(LendingPool, ());
+    let pool_client = LendingPoolClient::new(&env, &pool_id);
+    pool_client.initialize(&token_admin);
+    pool_client.set_withdrawal_cooldown(&0);
+
+    let provider1 = Address::generate(&env);
+    let provider2 = Address::generate(&env);
+    stellar_asset_client.mint(&provider1, &5_000);
+    stellar_asset_client.mint(&provider2, &5_000);
+
+    // Initial deposit of 3000
+    pool_client.deposit(&provider1, &token_id, &3_000);
+
+    // Cap is set to 2000, lower than current deposits (3000)
+    pool_client.set_max_pool_size(&token_id, &2_000);
+    assert!(pool_client.is_over_cap(&token_id));
+
+    // New deposit should fail with PoolSizeExceeded
+    let res = pool_client.try_deposit(&provider2, &token_id, &1_000);
+    assert_eq!(res, Err(Ok(crate::PoolError::PoolSizeExceeded)));
+
+    // Withdrawals should still work
+    pool_client.withdraw(&provider1, &token_id, &1_500);
+
+    // After withdrawing 1500, total deposits is 1500, which is below the cap of 2000
+    assert!(!pool_client.is_over_cap(&token_id));
+
+    // New deposit up to the cap should now succeed
+    pool_client.deposit(&provider2, &token_id, &500);
+    assert_eq!(pool_client.get_total_deposits(&token_id), 2_000);
+}
