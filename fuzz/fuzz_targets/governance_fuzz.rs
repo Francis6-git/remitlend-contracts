@@ -3,8 +3,8 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use multisig_governance::{
-    GovernanceContract, GovernanceContractClient, ProposalStatus,
-    MAX_SIGNERS, MIN_TIMELOCK_SECONDS, PROPOSAL_TTL_SECONDS,
+    GovernanceContract, GovernanceContractClient, ProposalStatus, MAX_SIGNERS,
+    MIN_TIMELOCK_SECONDS, PROPOSAL_TTL_SECONDS,
 };
 use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::{contract, contractimpl, Address, Env, IntoVal, Symbol, Val, Vec as SorobanVec};
@@ -75,7 +75,7 @@ macro_rules! rcall {
         $env.try_invoke_contract::<Val, Val>(
             &$client.address,
             &Symbol::new($env, $func),
-            ($($arg.clone(),)*).into_val($env)
+            ($($arg.clone(),)*).into_val($env),
         )
     };
 }
@@ -132,9 +132,10 @@ fuzz_target!(|input: FuzzInput| {
                 let n = ((*num_signers as u32) % (MAX_SIGNERS)).max(1) as usize;
                 let n = n.min(SIGNER_POOL_SIZE);
 
+                // FIXED: Replaced range loops with .iter().take(n) to satisfy clippy
                 let mut signers = SorobanVec::new(&env);
-                for i in 0..n {
-                    signers.push_back(signer_pool[i].clone());
+                for s in signer_pool.iter().take(n) {
+                    signers.push_back(s.clone());
                 }
 
                 // Optionally inject a duplicate to exercise rejection.
@@ -147,7 +148,9 @@ fuzz_target!(|input: FuzzInput| {
                 let proposed_new_admin = Address::generate(&env);
 
                 let result = rcall!(
-                    &env, client, "propose_admin_transfer",
+                    &env,
+                    client,
+                    "propose_admin_transfer",
                     (proposed_new_admin, signers, thresh, delay)
                 );
 
@@ -158,7 +161,8 @@ fuzz_target!(|input: FuzzInput| {
 
                 // INV: Propose never changes the admin.
                 assert_eq!(
-                    client.get_current_admin(), admin_before,
+                    client.get_current_admin(),
+                    admin_before,
                     "Admin must not change from propose"
                 );
             }
@@ -169,10 +173,7 @@ fuzz_target!(|input: FuzzInput| {
                 let signer = signer_pool[idx].clone();
 
                 // Snapshot approval count before.
-                let count_before = client
-                    .get_pending()
-                    .map(|p| p.approvals.len())
-                    .unwrap_or(0);
+                let count_before = client.get_pending().map(|p| p.approvals.len()).unwrap_or(0);
 
                 let result = rcall!(&env, client, "approve_transfer", (signer));
 
@@ -183,13 +184,15 @@ fuzz_target!(|input: FuzzInput| {
                     assert!(
                         count_after >= count_before && count_after <= count_before + 1,
                         "Approval count changed unexpectedly: {} -> {}",
-                        count_before, count_after
+                        count_before,
+                        count_after
                     );
                 }
 
                 // INV: Approve never changes the admin.
                 assert_eq!(
-                    client.get_current_admin(), admin_before,
+                    client.get_current_admin(),
+                    admin_before,
                     "Admin must not change from approve"
                 );
             }
@@ -220,7 +223,8 @@ fuzz_target!(|input: FuzzInput| {
 
                 // INV: Approve never changes the admin.
                 assert_eq!(
-                    client.get_current_admin(), admin_before,
+                    client.get_current_admin(),
+                    admin_before,
                     "Admin must not change from duplicate approve"
                 );
             }
@@ -240,7 +244,8 @@ fuzz_target!(|input: FuzzInput| {
                     if let Some(p) = pending_snapshot {
                         // INV-1a: Proposal was active.
                         assert_eq!(
-                            p.status, ProposalStatus::Active,
+                            p.status,
+                            ProposalStatus::Active,
                             "Finalized proposal must have been Active"
                         );
 
@@ -248,14 +253,16 @@ fuzz_target!(|input: FuzzInput| {
                         assert!(
                             p.approvals.len() >= p.threshold,
                             "Finalize requires threshold: approvals={} threshold={}",
-                            p.approvals.len(), p.threshold
+                            p.approvals.len(),
+                            p.threshold
                         );
 
                         // INV-1c: Timelock had elapsed.
                         assert!(
                             current_time >= p.executable_after,
                             "Finalize requires timelock elapsed: now={} executable_after={}",
-                            current_time, p.executable_after
+                            current_time,
+                            p.executable_after
                         );
 
                         // INV-1d: Proposal had not expired (TTL).
@@ -263,7 +270,8 @@ fuzz_target!(|input: FuzzInput| {
                         assert!(
                             current_time < expiry,
                             "Finalize must occur before TTL: now={} expiry={}",
-                            current_time, expiry
+                            current_time,
+                            expiry
                         );
 
                         // INV-3: Admin is now the proposed admin.
@@ -285,7 +293,8 @@ fuzz_target!(|input: FuzzInput| {
                 } else {
                     // ── Finalize FAILED — admin must be unchanged ─────────
                     assert_eq!(
-                        client.get_current_admin(), admin_before,
+                        client.get_current_admin(),
+                        admin_before,
                         "Admin must not change on failed finalize"
                     );
                 }
@@ -305,7 +314,8 @@ fuzz_target!(|input: FuzzInput| {
 
                 // INV: Cancel never changes the admin.
                 assert_eq!(
-                    client.get_current_admin(), admin_before,
+                    client.get_current_admin(),
+                    admin_before,
                     "Admin must not change from cancel"
                 );
             }
@@ -316,7 +326,9 @@ fuzz_target!(|input: FuzzInput| {
                 let none_reason = Option::<soroban_sdk::String>::None;
 
                 let result = rcall!(
-                    &env, client, "emergency_cancel_proposal",
+                    &env,
+                    client,
+                    "emergency_cancel_proposal",
                     (pid, none_reason)
                 );
 
@@ -329,7 +341,8 @@ fuzz_target!(|input: FuzzInput| {
 
                 // INV: Emergency cancel never changes the admin.
                 assert_eq!(
-                    client.get_current_admin(), admin_before,
+                    client.get_current_admin(),
+                    admin_before,
                     "Admin must not change from emergency cancel"
                 );
             }
@@ -356,14 +369,16 @@ fuzz_target!(|input: FuzzInput| {
                         assert!(
                             current_time >= expiry,
                             "Expire must only succeed after TTL: now={} expiry={}",
-                            current_time, expiry
+                            current_time,
+                            expiry
                         );
                     }
                 }
 
                 // INV: Expire never changes the admin.
                 assert_eq!(
-                    client.get_current_admin(), admin_before,
+                    client.get_current_admin(),
+                    admin_before,
                     "Admin must not change from expire"
                 );
             }
@@ -383,7 +398,8 @@ fuzz_target!(|input: FuzzInput| {
 
         // ── Global invariant: admin always matches expected value ─────────
         assert_eq!(
-            client.get_current_admin(), expected_admin,
+            client.get_current_admin(),
+            expected_admin,
             "Admin diverged from expected value"
         );
     }
