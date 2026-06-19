@@ -1568,6 +1568,7 @@ impl LoanManager {
         loan.collateral_amount = 0;
         env.storage().persistent().set(&loan_key, &loan);
         Self::bump_persistent_ttl(&env, &loan_key);
+        Self::decrement_borrower_loan_count(&env, &borrower);
 
         if collateral_to_release > 0 {
             use soroban_sdk::token::TokenClient;
@@ -1610,6 +1611,7 @@ impl LoanManager {
         loan.collateral_amount = 0;
         env.storage().persistent().set(&loan_key, &loan);
         Self::bump_persistent_ttl(&env, &loan_key);
+        Self::decrement_borrower_loan_count(&env, &loan.borrower);
 
         if collateral_to_release > 0 {
             use soroban_sdk::token::TokenClient;
