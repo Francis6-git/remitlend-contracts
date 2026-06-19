@@ -2883,6 +2883,8 @@ fn test_quote_total_debt_matches_repay() {
     // Loan should be fully repaid
     let loan_after = manager.get_loan(&loan_id);
     assert_eq!(loan_after.status, LoanStatus::Repaid);
+}
+
 // ── BorrowerLoanCount decrement on cancel / reject (issue #16) ────────────────
 
 #[test]
